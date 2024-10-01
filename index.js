@@ -1,5 +1,10 @@
 require ("dotenv").config();
-const {Bot, GrammyError, HttpError, Keyboard, InlineKeyboard} = require('grammy')
+const {Bot, GrammyError, HttpError, Keyboard, InlineKeyboard, DEBUG} = require('grammy')
+const User = require('./controllers/User');
+
+// Утилита для создания задержки
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 
 const bot = new Bot(process.env.BOT_API_KEY)
 
@@ -12,8 +17,20 @@ bot.api.setMyCommands([
     },
 ])
 
+
 bot.command('start', async (ctx) => {
-    await ctx.reply('Дарова, im employeeConttrol_bot')// зашли в старт
+    console.log(ctx.chat);
+    console.log(ctx.chatId);
+
+    const user = new User(ctx.chatId, ctx.chat.first_name, ctx.chat.last_name | null, ctx.chat.username, 'john.doe@example.com');
+    console.log(user);
+    user.printInfo();
+
+    //сюда асинхронную функцию аутентификации из БД
+
+    await ctx.reply(`Дарова, ${ctx.chat.first_name}! Im employeeConttrol_bot`)// зашли в старт
+    await delay(1000);
+    await ctx.reply('Представьтесь по форме: Имя Фамилия')
     await ctx.reply('Отправьте вашу геолокацию, нажав на кнопку ниже.', {
         reply_markup: {
             keyboard: [
@@ -25,7 +42,9 @@ bot.command('start', async (ctx) => {
             one_time_keyboard: true,  // Клавиатура исчезает после использования
         },
     });
+
 })
+
 
 // Обработка данных геолокации
 bot.on('message:location', async (ctx) => {
