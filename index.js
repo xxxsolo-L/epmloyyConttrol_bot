@@ -1,8 +1,13 @@
 require ("dotenv").config();
 const {Bot, GrammyError, HttpError, Keyboard, InlineKeyboard, DEBUG} = require('grammy')
 const User = require('./controllers/user.model');
+const geoData = require('./controllers/geoData.model');
 const mongoose = require ('mongoose');
 const mongoURI = process.env.MONGO_URI;
+const { haversineDistance } = require ('./services/geoCheck');
+const { saveGeoPoint } = require ('./services/geoService');
+const { userCreate } = require ('./services/userCreate');
+const { requestLocation } = require ('./services/requestLocation');
 
 
 mongoose.connect(mongoURI)
@@ -29,68 +34,60 @@ bot.command('start', async (ctx) => {
     console.log(ctx.chat);
     console.log(ctx.chatId);
 
-//    const user = new User(ctx.chatId, ctx.chat.first_name, ctx.chat.last_name | null, ctx.chat.username, 'john.doe@example.com');
-//    user.printInfo();
-
     const userId=ctx.from.id;
     console.log(userId);
+
     let user = await User.findOne({ user_id: userId });
     if (!user) {
-        // Если пользователя нет, создаем запись
-        user = new User({
-            user_id: ctx.from.id,
-            first_name: ctx.from.first_name,
-            last_name: ctx.from.last_name,
-            username: ctx.from.username,
-            language: ctx.from.language_code,
-            is_active: true,
-            joined_at: new Date()
-        });
-        await user.save();
-        await ctx.reply('Добро пожаловать в бота! Im employeeConttrol_bot');
+        await userCreate(ctx);
+        await requestLocation(ctx);
     } else {
         // Если пользователь уже есть в базе данных
         await ctx.reply(`С возвращением ${ctx.chat.first_name}!`);
+        await requestLocation(ctx);
     }
 
     //сюда асинхронную функцию аутентификации из БД
 
-
-    // await delay(1000);
-
-    // await ctx.reply('Отправьте вашу геолокацию, нажав на кнопку ниже.', {
-    //     reply_markup: {
-    //         keyboard: [
-    //             [
-    //                 { text: "Отправить геолокацию", request_location: true }, // Кнопка для запроса геолокации
-    //             ],
-    //         ],
-    //         resize_keyboard: true,  // Изменение размера клавиатуры
-    //         one_time_keyboard: true,  // Клавиатура исчезает после использования
-    //     },
-    // });
-
-})
+});
 
 
 // Обработка данных геолокации
 bot.on('message:location', async (ctx) => {
     const location = ctx.message.location;
+    console.log(ctx.message.location);
 
     // Проверяем, что геолокация действительно присутствует
     if (location) {
+        // Сохраняем в БД отметку
+        await saveGeoPoint(ctx, location);
+
+        const center = { lat: 47.275109, lng: 29.147706 };
+
         const { latitude, longitude } = location;
+        const point = { lat: location.latitude, lng: location.longitude };
+        // Ваша точка для проверки
+        const distance = haversineDistance(center, point)
+        console.log(`Расстояние: ${distance} м`);
 
         // Отправка полученной геолокации в виде текста
         await ctx.reply(`Спасибо! ✍  Ваша геолокация: \n🌏Широта: ${latitude}\n🌎Долгота: ${longitude}`);
-
-        // Отправка геолокации на карте
+        //Отправка геолокации на карте
         await ctx.replyWithLocation(latitude, longitude);
+        if (distance <= 100) {
+            await delay(1000);
+        await ctx.reply('Вы в пределе хаба.');
+    } else {
+            await delay(1000);
+            await ctx.reply(`Вы не в хабе! Расстояние: ${distance.toFixed(2)} м.`);
+    }
     } else {
         // Обработка ситуации, когда геолокации нет
         await ctx.reply("Пожалуйста, отправьте свою геолокацию, нажав на кнопку.");
     }
 });
+
+
 
 bot.catch((err) => {
     const ctx = err.ctx;
